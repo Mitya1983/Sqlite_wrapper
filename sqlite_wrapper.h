@@ -18,11 +18,11 @@ class Sqlite_wrapper
         std::string name;
         std::string type;
         std::string defaultValue;
-        bool pK;
-        bool unique;
+        bool isPK;
+        bool isUnique;
         bool isNullable;
         bool isDefaultValue;
-        void getStatement();
+        std::string getStatement();
         void clear();
     };
     struct ForeignKey
@@ -30,7 +30,7 @@ class Sqlite_wrapper
         std::string column;
         std::string refTable;
         std::string refColumn;
-        void getStatement();
+        std::string getStatement();
         void clear();
     };
 
@@ -40,12 +40,12 @@ class Sqlite_wrapper
         std::queue<Column> columns;
         bool isForeignKey;
         std::queue<ForeignKey> foreignKeys;
-        void getStatement();
+        std::string getStatement();
         void clear();
     };
     static Query qResult;
     bool firstQuery;
-    static int callback(void*, int argc, char **argv, char **azColName);
+    static int callback(void*, int argc, char **argv, char **azColName);//TODO
     const char *sqlite3Errmsg;
     Sqlite_wrapper();
     Sqlite_wrapper(const Sqlite_wrapper &other) = delete;
@@ -58,21 +58,21 @@ class Sqlite_wrapper
     Table curTable;
     bool currentTable;
     void _createDatabase(const std::string &fileName);
-    void _createTable(const std::string &tableName);
-    void _createColumn(const std::string &columnName);
-    void _setAsPK();
-    void _setAsUnique();
-    void _setAsNullable();
-    void _setDefaultValue();
-    void _addColumn();
-    void _setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn);
-    void _addTable();
-    void _insert(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);
-    void _select(const std::list<std::string> &columns, const std::string table);
-    void _disconnectFromDatabase();
+    void _createTable(const std::string &tableName);//TODO
+    void _createColumn(const std::string &columnName);//TODO
+    void _setAsPK();//TODO
+    void _setAsUnique();//TODO
+    void _setAsNullable();//TODO
+    void _setDefaultValue();//TODO
+    void _addColumn();//TODO
+    void _setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn);//TODO
+    void _addTable();//TODO
+    void _insert(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);//TODO
+    void _select(const std::list<std::string> &columns, const std::string table);//TODO
+    void _disconnectFromDatabase();//TODO
 
-    virtual ~Sqlite_wrapper();
 protected:
+
     virtual void Sqlite3ExceptionHandler(std::exception &e, const std::string &name = "");
     virtual void Sqlite3BusyExceptionHandler(std::exception &e, const std::string &name = "");
     virtual void CreateDatabaseExceptionHandler(std::exception &e);
@@ -90,6 +90,8 @@ public:
     void insert(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);
     Query select(const std::list<std::string> &columns, const std::string table);
     void disconnectFromDatabase();
+
+    virtual ~Sqlite_wrapper();
 };
 
 #endif // SQLITE_WRAPPER_H
