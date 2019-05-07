@@ -36,7 +36,9 @@ public:
 };
 class InsertException : std::exception
 {
+    std::string _msg;
 public:
+    InsertException(const std::string &tableName, const std::string &msg);
     virtual const char *what() const noexcept;
 };
 

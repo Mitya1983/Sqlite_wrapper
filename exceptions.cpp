@@ -7,7 +7,7 @@ Sqlite3Exception::Sqlite3Exception(const char *msg)
 
 Sqlite3Exception::Sqlite3Exception(std::string tableName, const char *msg)
 {
-    std::string message = "Error on table ";
+    std::string message = "on table ";
     message += tableName;
     message += ": ";
     message += msg;
@@ -31,7 +31,7 @@ const char *CreateDatabaseException::what() const noexcept
 
 TableException::TableException(const std::string &tableName, const std::string &msg)
 {
-    std::string message = "Error on table ";
+    std::string message = "on table ";
     message += tableName;
     message += ": ";
     message += msg;
@@ -45,7 +45,7 @@ const char *TableException::what() const noexcept
 
 ColumnException::ColumnException(const std::string &columnName, const std::string &msg)
 {
-    std::string message = "Error on column ";
+    std::string message = "on column ";
     message += columnName;
     message += ": ";
     message += msg;
@@ -57,7 +57,16 @@ const char *ColumnException::what() const noexcept
     return _msg.c_str();
 }
 
+InsertException::InsertException(const std::string &tableName, const std::string &msg)
+{
+    std::string message = "on table ";
+    message += tableName;
+    message += ": ";
+    message += msg;
+    _msg = std::move(message);
+}
+
 const char *InsertException::what() const noexcept
 {
-
+    return _msg.c_str();
 }
