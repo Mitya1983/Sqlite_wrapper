@@ -5,6 +5,15 @@ Sqlite3Exception::Sqlite3Exception(const char *msg)
     _msg = msg;
 }
 
+Sqlite3Exception::Sqlite3Exception(std::string tableName, const char *msg)
+{
+    std::string message = "Error on table ";
+    message += tableName;
+    message += ": ";
+    message += msg;
+    _msg = message.c_str();
+}
+
 const char *Sqlite3Exception::what() const noexcept
 {
     return _msg;
@@ -20,38 +29,32 @@ const char *CreateDatabaseException::what() const noexcept
     return "Database filename wasn't provided";
 }
 
-CreateTableException::CreateTableException(const std::string &tableName, const std::string &msg)
+TableException::TableException(const std::string &tableName, const std::string &msg)
 {
     std::string message = "Error on table ";
     message += tableName;
     message += ": ";
     message += msg;
-    _msg = message.c_str();
+    _msg = std::move(message);
 }
 
-const char *CreateTableException::what() const noexcept
+const char *TableException::what() const noexcept
 {
-    return _msg;
+    return _msg.c_str();
 }
 
-const char *CreateColumnException::what() const noexcept
+ColumnException::ColumnException(const std::string &columnName, const std::string &msg)
 {
-
+    std::string message = "Error on column ";
+    message += columnName;
+    message += ": ";
+    message += msg;
+    _msg = std::move(message);
 }
 
-const char *PKorUniqueValueException::what() const noexcept
+const char *ColumnException::what() const noexcept
 {
-
-}
-
-const char *addColumnException::what() const noexcept
-{
-
-}
-
-const char *AddTableException::what() const noexcept
-{
-
+    return _msg.c_str();
 }
 
 const char *InsertException::what() const noexcept
