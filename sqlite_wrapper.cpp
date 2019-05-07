@@ -13,6 +13,13 @@ Sqlite_wrapper::Sqlite_wrapper()
 
 }
 
+void Sqlite_wrapper::_noResultExec(const std::string query)
+{
+    int status;
+    if ((status = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
+        throw Sqlite3Exception(sqlite3Errmsg);
+}
+
 void Sqlite_wrapper::_createDatabase(const std::string &fileName)
 {
     if (fileName == "")
@@ -105,11 +112,49 @@ void Sqlite_wrapper::_addTable()
 {
     if (!currentTable)
         throw TableException("undefined", "Work with table wasn't started.\ncreateTable stetemnt should be used first");
-    int status;
-    if ((status = sqlite3_exec(db, curTable.getStatement().c_str(), nullptr, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
-        throw Sqlite3Exception(sqlite3Errmsg);
+    _noResultExec(curTable.getStatement());
     curTable.clear();
     currentTable = false;
+}
+
+void Sqlite_wrapper::_insertInto(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values)
+{
+    if (columns.size() != values.size())
+        throw InsertException(table, "Columns and Values not correspond");
+    std::string statement = "insert into ";
+    statement += table;
+    statement += " (";
+    auto start = columns.begin();
+    auto end = --columns.end();
+    while (true)
+    {
+        if (start == end)
+        {
+            statement += *start;
+            statement += ") ";
+            break;
+        }
+
+        statement += *start;
+        statement += ", ";
+        start++;
+    }
+    statement += "values (";
+    start = values.begin();
+    end = --values.end();
+    while (true)
+    {
+        statement += "'";
+        statement += *start;
+        if (start == end)
+        {
+            statement += "'); ";
+            break;
+        }
+        statement += "', ";
+        start++;
+    }
+    _noResultExec(statement);
 }
 
 void Sqlite_wrapper::_disconnectFromDatabase()
@@ -122,6 +167,7 @@ void Sqlite_wrapper::_disconnectFromDatabase()
 void Sqlite_wrapper::sqlite3ExceptionHandler(std::exception &e, const std::string &name)
 {
     std::cerr << "Error from sqlite " << name << ": " << e.what() << std::endl;
+    sqlite3_free(sqlite3Errmsg);
 }
 
 void Sqlite_wrapper::sqlite3BusyExceptionHandler(std::exception &e, const std::string &name)
@@ -140,49 +186,54 @@ void Sqlite_wrapper::sqlite3BusyExceptionHandler(std::exception &e, const std::s
 
 void Sqlite_wrapper::createDatabaseExceptionHandler(std::exception &e)
 {
-    std::cerr << "Create Database " << e.what() << std::endl;
+    std::cerr << "createDatabase() Error " << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::createTableExceptionHandler(std::exception &e)
 {
-    std::cerr << "Create table " << e.what() << std::endl;
+    std::cerr << "createTable() Error" << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::createColumnExceptionHandler(std::exception &e)
 {
-    std::cerr << "Create column " << e.what() << std::endl;
+    std::cerr << "createColumn() Error " << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::setPKExceptionHandler(std::exception &e)
 {
-    std::cerr << "Column modofication " << e.what() << std::endl;
+    std::cerr << "setAsPK() Error " << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::setUniqueExceptionHandler(std::exception &e)
 {
-    std::cerr << "Column modofication " << e.what() << std::endl;
+    std::cerr << "setUnique() Error " << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::setDefaultValueExceptionHandler(std::exception &e)
 {
-    std::cerr << "Column modofication " << e.what() << std::endl;
+    std::cerr << "setDefaultValue() Error " << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::addColumnExceptionHandler(std::exception &e)
 {
-    std::cerr << "Add column " << e.what() << std::endl;
+    std::cerr << "addcolumn() Error " << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::setForeignKeyExceptionHandler(std::exception &e)
 {
-    std::cerr << "Foreign Key " << e.what() << std::endl;
+    std::cerr << "setForeignKey() Error " << e.what() << std::endl;
 }
 
 void Sqlite_wrapper::addTableExceptionHandler(std::exception &e)
 {
-     std::cerr << "Add table " << e.what() << std::endl;
+     std::cerr << "addTable() Error " << e.what() << std::endl;
      curTable.clear();
      currentTable = false;
+}
+
+void Sqlite_wrapper::insertExceptionHandler(std::exception &e)
+{
+    std::cerr << "insertInto() Error " << e.what() << std::endl;
 }
 
 Sqlite_wrapper *Sqlite_wrapper::connectToDatabase(const std::string &fileName)
@@ -277,9 +328,13 @@ void Sqlite_wrapper::addTable()
     }
 }
 
-void Sqlite_wrapper::insert(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values)
+void Sqlite_wrapper::insertInto(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values)
 {
-
+    try {
+        _insertInto(table, columns, values);
+    } catch (std::exception &e) {
+        insertExceptionHandler(e);
+    }
 }
 
 Query Sqlite_wrapper::select(const std::list<std::string> &columns, const std::string table)

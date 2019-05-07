@@ -57,6 +57,7 @@ class Sqlite_wrapper
     bool currentColumn;
     Table curTable;
     bool currentTable;
+    void _noResultExec(const std::string query);
     void _createDatabase(const std::string &fileName);
     void _createTable(const std::string &tableName);
     void _createColumn(const std::string &columnName, const std::string &type);
@@ -67,7 +68,7 @@ class Sqlite_wrapper
     void _addColumn();
     void _setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn);
     void _addTable();
-    void _insert(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);//TODO
+    void _insertInto(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);
     void _select(const std::list<std::string> &columns, const std::string table);//TODO
     void _disconnectFromDatabase();//TODO
 
@@ -83,6 +84,7 @@ protected:
     virtual void addColumnExceptionHandler(std::exception &e);
     virtual void setForeignKeyExceptionHandler(std::exception &e);
     virtual void addTableExceptionHandler(std::exception &e);
+    virtual void insertExceptionHandler(std::exception &e);
 public:
     static Sqlite_wrapper *connectToDatabase(const std::string &fileName);
     void createTable(const std::string &tableName);
@@ -94,7 +96,7 @@ public:
     void addColumn();
     void setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn = "");
     void addTable();
-    void insert(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);
+    void insertInto(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);
     Query select(const std::list<std::string> &columns, const std::string table);
     void disconnectFromDatabase();
 
