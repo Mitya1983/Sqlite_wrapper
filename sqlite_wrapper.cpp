@@ -23,30 +23,108 @@ void Sqlite_wrapper::_createDatabase(const std::string &fileName)
         path += ".db";
     }
     int status;
-    if ((status = sqlite3_open(path.c_str(), &base)))
-        throw Sqlite3Exception(sqlite3_errmsg(base));
+    if ((status = sqlite3_open(path.c_str(), &db)))
+        throw Sqlite3Exception(sqlite3_errmsg(db));
 }
 
 void Sqlite_wrapper::_createTable(const std::string &tableName)
 {
     if (currentTable)
-        throw CreateTableException(tableName, "Work with previous table wasn't finished.\nPlease make sure that each \
-                                               createTable has corresponding addTable statement");
+        throw TableException(tableName, "Work with previous table wasn't finished.\nPlease make sure that each createTable statement has corresponding addTable statement.");
+    currentTable = true;
+    curTable.name = std::move(tableName);
+}
+
+void Sqlite_wrapper::_createColumn(const std::string &columnName, const std::string &type)
+{
+    if (currentColumn)
+        throw ColumnException(columnName, "Work with previous column wasn't finished.\nPlease make sure that each createColumn statement has corresponding addColumn statement.");
+    currentColumn = true;
+    curColumn.name = std::move(columnName);
+    curColumn.type = std::move(type);
+    curColumn.isPK = false;
+    curColumn.isUnique = false;
+    curColumn.isNullable = true;
+    curColumn.isDefaultValue = false;
+}
+
+void Sqlite_wrapper::_setAsPK()
+{
+    if (curColumn.isDefaultValue)
+        throw ColumnException(curColumn.name, "The default value was previosly set for this column.\nSetting it as Primary Key may provoke issues.");
+    curColumn.isPK = true;
+    curColumn.isUnique = true;
+    curColumn.isNullable = false;
+}
+
+void Sqlite_wrapper::_setAsUnique()
+{
+    if (curColumn.isDefaultValue)
+        throw ColumnException(curColumn.name, "The default value was previosly set for this column.\nSetting it as Unique may provoke issues.");
+    curColumn.isUnique = true;
+    curColumn.isNullable = false;
+}
+
+void Sqlite_wrapper::_setAsNotNullable()
+{
+    curColumn.isNullable = false;
+}
+
+void Sqlite_wrapper::_setDefaultValue(const std::string &value)
+{
+    if (curColumn.isPK || curColumn.isUnique)
+        throw ColumnException(curColumn.name, "The column was previously set as Primery Key or Unique value.\n Setting a Default value may provoke issues.");
+    curColumn.isDefaultValue = true;
+    curColumn.defaultValue = std::move(value);
+}
+
+void Sqlite_wrapper::_addColumn()
+{
+    if (!currentColumn)
+        throw ColumnException("undefined", "Work with column wasn't started.\ncreateColumn stetemnt should be used first");
+    curTable.columns.push(std::move(curColumn));
+    currentColumn = false;
+    curColumn.clear();
+}
+
+void Sqlite_wrapper::_setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn)
+{
+    if (!curTable.isForeignKey)
+        curTable.isForeignKey = true;
+    ForeignKey key;
+    key.column = std::move(column);
+    key.refTable = std::move(refTable);
+    if (refColumn == "")
+        key.refColumn = column;
+    else
+        key.refColumn = std::move(refColumn);
+    curTable.foreignKeys.push(std::move(key));
+}
+
+void Sqlite_wrapper::_addTable()
+{
+    if (!currentTable)
+        throw TableException("undefined", "Work with table wasn't started.\ncreateTable stetemnt should be used first");
+    int status;
+    if ((status = sqlite3_exec(db, curTable.getStatement().c_str(), nullptr, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
+        throw Sqlite3Exception(sqlite3Errmsg);
+    curTable.clear();
+    currentTable = false;
 }
 
 void Sqlite_wrapper::_disconnectFromDatabase()
 {
     int status;
-    if ((status = sqlite3_close(base)) == SQLITE_BUSY)
+    if ((status = sqlite3_close(db)) == SQLITE_BUSY)
         throw Sqlite3BusyException();
 }
 
-void Sqlite_wrapper::Sqlite3ExceptionHandler(std::exception &e, const std::string &name)
+void Sqlite_wrapper::sqlite3ExceptionHandler(std::exception &e, const std::string &name)
 {
-    std::cerr << "Error on " << name << ". " << e.what() << std::endl;
+    std::cerr << "Error from sqlite " << name << ": " << e.what() << std::endl;
 }
 
-void Sqlite_wrapper::Sqlite3BusyExceptionHandler(std::exception &e, const std::string &name)
+void Sqlite_wrapper::sqlite3BusyExceptionHandler(std::exception &e, const std::string &name)
 {
     static int count = 1;
     std::cerr << e.what() << std::endl;
@@ -56,13 +134,55 @@ void Sqlite_wrapper::Sqlite3BusyExceptionHandler(std::exception &e, const std::s
         std::cerr << "Attempt to close connection to database #" << count << std::endl;
         _disconnectFromDatabase();
     } catch (std::exception &e) {
-        Sqlite3BusyExceptionHandler(e);
+        sqlite3BusyExceptionHandler(e);
     }
 }
 
-void Sqlite_wrapper::CreateDatabaseExceptionHandler(std::exception &e)
+void Sqlite_wrapper::createDatabaseExceptionHandler(std::exception &e)
 {
-    std::cerr << e.what() << std::endl;
+    std::cerr << "Create Database " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::createTableExceptionHandler(std::exception &e)
+{
+    std::cerr << "Create table " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::createColumnExceptionHandler(std::exception &e)
+{
+    std::cerr << "Create column " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::setPKExceptionHandler(std::exception &e)
+{
+    std::cerr << "Column modofication " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::setUniqueExceptionHandler(std::exception &e)
+{
+    std::cerr << "Column modofication " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::setDefaultValueExceptionHandler(std::exception &e)
+{
+    std::cerr << "Column modofication " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::addColumnExceptionHandler(std::exception &e)
+{
+    std::cerr << "Add column " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::setForeignKeyExceptionHandler(std::exception &e)
+{
+    std::cerr << "Foreign Key " << e.what() << std::endl;
+}
+
+void Sqlite_wrapper::addTableExceptionHandler(std::exception &e)
+{
+     std::cerr << "Add table " << e.what() << std::endl;
+     curTable.clear();
+     currentTable = false;
 }
 
 Sqlite_wrapper *Sqlite_wrapper::connectToDatabase(const std::string &fileName)
@@ -71,7 +191,7 @@ Sqlite_wrapper *Sqlite_wrapper::connectToDatabase(const std::string &fileName)
     try {
         temp->_createDatabase(fileName);
     } catch (std::exception &e) {
-        temp->CreateDatabaseExceptionHandler(e);
+        temp->createDatabaseExceptionHandler(e);
         delete temp;
         return nullptr;
     }
@@ -80,47 +200,81 @@ Sqlite_wrapper *Sqlite_wrapper::connectToDatabase(const std::string &fileName)
 
 void Sqlite_wrapper::createTable(const std::string &tableName)
 {
-
+    try {
+        _createTable(tableName);
+    } catch (TableException &e) {
+        createTableExceptionHandler(e);
+    } catch (Sqlite3Exception &e) {
+        sqlite3ExceptionHandler(e);
+    }
 }
 
-void Sqlite_wrapper::createColumn(const std::string &columnName)
+void Sqlite_wrapper::createColumn(const std::string &columnName, const std::string &type)
 {
-
+    try {
+        _createColumn(columnName, type);
+    } catch (ColumnException &e) {
+        createColumnExceptionHandler(e);
+    }
 }
 
 void Sqlite_wrapper::setAsPK()
 {
-
+    try {
+        _setAsPK();
+    } catch (ColumnException &e) {
+        setPKExceptionHandler(e);
+    }
 }
 
 void Sqlite_wrapper::setAsUnique()
 {
-
+    try {
+        _setAsUnique();
+    } catch (ColumnException &e) {
+        setUniqueExceptionHandler(e);
+    }
 }
 
-void Sqlite_wrapper::setAsNullable()
+void Sqlite_wrapper::setAsNotNullable()
 {
-
+    _setAsNotNullable();
 }
 
-void Sqlite_wrapper::setDefaultValue()
+void Sqlite_wrapper::setDefaultValue(const std::string &value)
 {
-
+    try {
+        _setDefaultValue(value);
+    } catch (ColumnException &e) {
+        setDefaultValueExceptionHandler(e);
+    }
 }
 
 void Sqlite_wrapper::addColumn()
 {
-
+    try {
+        _addColumn();
+    } catch (ColumnException &e) {
+        addColumnExceptionHandler(e);
+    }
 }
 
 void Sqlite_wrapper::setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn)
 {
-
+    try {
+        _setForeinKey(column, refTable, refColumn);
+    } catch (std::exception &e) {
+        setForeignKeyExceptionHandler(e);
+    }
 }
 
 void Sqlite_wrapper::addTable()
 {
-
+    try {
+        _addTable();
+    } catch (std::exception &e) {
+        addTableExceptionHandler(e);
+    }
 }
 
 void Sqlite_wrapper::insert(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values)
@@ -138,7 +292,7 @@ void Sqlite_wrapper::disconnectFromDatabase()
     try {
         _disconnectFromDatabase();
     } catch (std::exception &e) {
-        Sqlite3BusyExceptionHandler(e);
+        sqlite3BusyExceptionHandler(e);
     }
 }
 
@@ -163,8 +317,9 @@ std::string Sqlite_wrapper::Column::getStatement()
         statement += " not null";
     if (isDefaultValue)
     {
-        statement += " default ";
+        statement += " default '";
         statement += defaultValue;
+        statement += "'";
     }
 
     return statement;
@@ -205,13 +360,13 @@ void Sqlite_wrapper::ForeignKey::clear()
 std::string Sqlite_wrapper::Table::getStatement()
 {
     if (columns.size() == 0)
-        throw CreateTableException(name, "No columns were provided");
+        throw TableException(name, "No columns were provided");
 
     std::string statement = "create table ";
 
     statement += name;
     statement += " (";
-    while (columns.size() > 0)
+    while (columns.size() > 1)
     {
         statement += columns.front().getStatement();
         statement += ", ";
@@ -222,7 +377,8 @@ std::string Sqlite_wrapper::Table::getStatement()
     columns.pop();
     if (isForeignKey)
     {
-        while (foreignKeys.size() > 0)
+        statement += ", ";
+        while (foreignKeys.size() > 1)
         {
             statement += foreignKeys.front().getStatement();
             statement += ", ";
@@ -239,9 +395,9 @@ std::string Sqlite_wrapper::Table::getStatement()
 void Sqlite_wrapper::Table::clear()
 {
     name.clear();
-    while (sizeof (columns) != 0)
+    while (columns.size() > 0)
         columns.pop();
     isForeignKey = false;
-    while (sizeof (foreignKeys) != 0)
+    while (foreignKeys.size() > 0)
         foreignKeys.pop();
 }
