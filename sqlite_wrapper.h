@@ -1,15 +1,15 @@
-﻿#ifndef SQLITE_WRAPPER_H
+#ifndef SQLITE_WRAPPER_H
 #define SQLITE_WRAPPER_H
 #include <sqlite3.h>
 #include <string>
 #include <queue>
 #include <map>
-#include <list>
-
+#include <vector>
+#include <memory>
 
 #include "exceptions.h"
 
-using Query = std::map<std::string, std::list<std::string>>;
+using Query = std::map<std::string, std::vector<std::string>>;
 
 class Sqlite_wrapper
 {
@@ -22,7 +22,7 @@ class Sqlite_wrapper
         bool isUnique;
         bool isNullable;
         bool isDefaultValue;
-        std::string getStatement();
+        std::string getQuery();
         void clear();
     };
     struct ForeignKey
@@ -30,22 +30,24 @@ class Sqlite_wrapper
         std::string column;
         std::string refTable;
         std::string refColumn;
-        std::string getStatement();
+        std::string getQuery();
         void clear();
     };
 
     struct Table
     {
+        std::shared_ptr<std::string> databaseName;
         std::string name;
         std::queue<Column> columns;
         bool isForeignKey;
         std::queue<ForeignKey> foreignKeys;
-        std::string getStatement();
+        std::string getQuery();
         void clear();
     };
-    static Query qResult;
-    bool firstQuery;
-    static int callback(void*, int argc, char **argv, char **azColName);//TODO
+    std::shared_ptr<std::string> name;
+    static std::shared_ptr<Query> qResult;
+    static bool firstQuery;
+    static int callback(void*, int argc, char **argv, char **azColName);
     char *sqlite3Errmsg;
     Sqlite_wrapper();
     Sqlite_wrapper(const Sqlite_wrapper &other) = delete;
@@ -68,13 +70,20 @@ class Sqlite_wrapper
     void _addColumn();
     void _setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn);
     void _addTable();
-    void _insertInto(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);
-    void _select(const std::list<std::string> &columns, const std::string table);//TODO
-    void _disconnectFromDatabase();//TODO
+    void _dropTable(const std::string &tableName);//TODO
+    void _insertInto(const std::string &table, const std::vector<std::string> &columns, const std::vector<std::string> &values);
+    void _selectFrom(const std::vector<std::string> &columns, const std::string table);
+    void _selectFromWhere(const std::vector<std::string> &columns, const std::string table, const std::string &where);
+    void _selectFromLike(const std::vector<std::string> &columns, const std::string &table,
+                         const std::vector<std::string> &columnToCheck, const std::vector<std::string> &like,
+                         const std::string & operand);
+    void _updateTable(const std::string &tableName, const std::vector<std::string> &columns,
+                      const std::vector<std::string> &values, const std::string &where);
+    void _disconnectFromDatabase();
 
 protected:
-    virtual void sqlite3ExceptionHandler(std::exception &e, const std::string &name = "");
-    virtual void sqlite3BusyExceptionHandler(std::exception &e, const std::string &name = "");
+    virtual void sqlite3ExceptionHandler(std::exception &e);
+    virtual void sqlite3BusyExceptionHandler(std::exception &e);
     virtual void createDatabaseExceptionHandler(std::exception &e);
     virtual void createTableExceptionHandler(std::exception &e);
     virtual void createColumnExceptionHandler(std::exception &e);
@@ -85,8 +94,11 @@ protected:
     virtual void setForeignKeyExceptionHandler(std::exception &e);
     virtual void addTableExceptionHandler(std::exception &e);
     virtual void insertExceptionHandler(std::exception &e);
+    virtual void selectFromExceptionHandler(std::exception &e);
+    virtual void updateExceptionHandler(std::exception &e);
 public:
     static Sqlite_wrapper *connectToDatabase(const std::string &fileName);
+
     void createTable(const std::string &tableName);
     void createColumn(const std::string &columnName, const std::string &type);
     void setAsPK();
@@ -96,8 +108,16 @@ public:
     void addColumn();
     void setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn = "");
     void addTable();
-    void insertInto(const std::string &table, const std::list<std::string> &columns, const std::list<std::string> &values);
-    Query select(const std::list<std::string> &columns, const std::string table);
+    void dropTable(const std::string &tableName);//TODO
+    void insertInto(const std::string &table, const std::vector<std::string> &columns, const std::vector<std::string> &values);
+    static void printToShell(std::shared_ptr<Query> result);
+    std::shared_ptr<Query> selectFrom(const std::vector<std::string> &columns, const std::string table);
+    std::shared_ptr<Query> selectFromWhere(const std::vector<std::string> &columns, const std::string table, const std::string &where);
+    std::shared_ptr<Query> selectFromLike(const std::vector<std::string> &columns, const std::string &table,
+                                          const std::vector<std::string> &columnToCheck, const std::vector<std::string> &like,
+                                          const std::string &operand = "or");
+    void updateTable(const std::string &tableName, const std::vector<std::string> &columns,
+                     const std::vector<std::string> &values, const std::string &where);
     void disconnectFromDatabase();
 
     virtual ~Sqlite_wrapper();
