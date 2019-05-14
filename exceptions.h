@@ -2,7 +2,7 @@
 #define EXCEPTIONS_H
 #include <exception>
 #include <string>
-//TODO: Reimplement all Exceptions same as SqliteException
+
 class Sqlite3Exception : public std::exception
 {
     std::string _msg;

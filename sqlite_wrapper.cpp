@@ -29,11 +29,34 @@ Sqlite_wrapper::Sqlite_wrapper()
     sqlite3Errmsg = nullptr;
 }
 
-void Sqlite_wrapper::_noResultExec(const std::string query)
+void Sqlite_wrapper::_modifyingExec(const std::string &query)
 {
     int status;
-    if ((status = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
-        throw Sqlite3Exception(*name, query, sqlite3Errmsg);
+    status = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &sqlite3Errmsg);
+    while (status == SQLITE_BUSY)
+    {
+        sqlite3_free(sqlite3Errmsg);
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        status = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &sqlite3Errmsg);
+    }
+    if (status != SQLITE_OK)
+    {
+        std::string msg = std::move(sqlite3Errmsg);
+        sqlite3_free(sqlite3Errmsg);
+        throw Sqlite3Exception(*name, query, msg);
+    }
+}
+
+void Sqlite_wrapper::_readExec(const std::string &query)
+{
+    int status;
+    auto _callback = Sqlite_wrapper::callback;
+    if ((status = sqlite3_exec(db, query.c_str(), _callback, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
+    {
+        std::string msg = std::move(sqlite3Errmsg);
+        sqlite3_free(sqlite3Errmsg);
+        throw Sqlite3Exception(*name, query, msg);
+    }
 }
 
 void Sqlite_wrapper::_createDatabase(const std::string &fileName)
@@ -51,22 +74,24 @@ void Sqlite_wrapper::_createDatabase(const std::string &fileName)
         throw Sqlite3Exception(*name, path, sqlite3_errmsg(db));
 }
 
-void Sqlite_wrapper::_createTable(const std::string &tableName)
+void Sqlite_wrapper::_createTable(const std::string &table)
 {
     if (currentTable)
-        throw TableException(*name, tableName, "Work with previous table wasn't finished.\nPlease make sure that each createTable query has corresponding addTable query.");
+        throw TableException(*name, table, "Work with previous table wasn't finished.\nPlease make sure that each createTable query has corresponding addTable query.");
     currentTable = true;
-    curTable.name = std::move(tableName);
+    curTable.name = std::move(table);
     curTable.databaseName = name;
     curTable.isForeignKey = false;
+    curTable.noRowID = false;
+    curTable.pKisSet = false;
 }
 
-void Sqlite_wrapper::_createColumn(const std::string &columnName, const std::string &type)
+void Sqlite_wrapper::_createColumn(const std::string &column, const std::string &type)
 {
     if (currentColumn)
-        throw ColumnException(*curTable.databaseName, curTable.name, columnName, "Work with previous column wasn't finished.\nPlease make sure that each createColumn query has corresponding addColumn query.");
+        throw ColumnException(*curTable.databaseName, curTable.name, column, "Work with previous column wasn't finished.\nPlease make sure that each createColumn query has corresponding addColumn query.");
     currentColumn = true;
-    curColumn.name = std::move(columnName);
+    curColumn.name = std::move(column);
     curColumn.type = std::move(type);
     curColumn.isPK = false;
     curColumn.isUnique = false;
@@ -81,6 +106,7 @@ void Sqlite_wrapper::_setAsPK()
     curColumn.isPK = true;
     curColumn.isUnique = true;
     curColumn.isNullable = false;
+    curTable.pKisSet = true;
 }
 
 void Sqlite_wrapper::_setAsUnique()
@@ -102,6 +128,11 @@ void Sqlite_wrapper::_setDefaultValue(const std::string &value)
         throw ColumnException(*curTable.databaseName, curTable.name, curColumn.name, "The column was previously set as Primery Key or Unique value.\n Setting a Default value may provoke issues.");
     curColumn.isDefaultValue = true;
     curColumn.defaultValue = std::move(value);
+}
+
+void Sqlite_wrapper::_setNoRowID()
+{
+    curTable.noRowID = true;
 }
 
 void Sqlite_wrapper::_addColumn()
@@ -131,7 +162,7 @@ void Sqlite_wrapper::_addTable()
 {
     if (!currentTable)
         throw TableException(*name, "undefined", "Work with table wasn't started.\ncreateTable stetemnt should be used first");
-    _noResultExec(curTable.getQuery());
+    _modifyingExec(curTable.getQuery());
     curTable.clear();
     currentTable = false;
 }
@@ -143,37 +174,24 @@ void Sqlite_wrapper::_insertInto(const std::string &table, const std::vector<std
     std::string query = "insert into ";
     query += table;
     query += " (";
-    auto start = columns.begin();
-    auto end = --columns.end();
-    while (true)
+    for (unsigned int i = 0, n = columns.size(); i < n; i++)
     {
-        if (start == end)
-        {
-            query += *start;
+        query += std::move(columns[i]);
+        if (i < n - 1)
+            query += ", ";
+        else
             query += ") ";
-            break;
-        }
-
-        query += *start;
-        query += ", ";
-        start++;
     }
     query += "values (";
-    start = values.begin();
-    end = --values.end();
-    while (true)
+    for (unsigned int i = 0, n = values.size(); i < n; i++)
     {
-        query += "'";
-        query += *start;
-        if (start == end)
-        {
-            query += "'); ";
-            break;
-        }
-        query += "', ";
-        start++;
+        query += '\'' + std::move(values[i]) + '\'';
+        if (i < n - 1)
+            query += ", ";
+        else
+            query += ");";
     }
-    _noResultExec(query);
+    _modifyingExec(query);
 }
 
 void Sqlite_wrapper::_selectFrom(const std::vector<std::string> &columns, const std::string table)
@@ -181,49 +199,82 @@ void Sqlite_wrapper::_selectFrom(const std::vector<std::string> &columns, const 
     qResult->clear();
     firstQuery = true;
     std::string query = "select ";
-    auto start = columns.begin();
-    auto end = --columns.end();
-    while (true)
+    for (unsigned int i = 0, n = columns.size(); i < n; i++)
     {
-        query += *start;
-        if (start == end)
-        {
+        query += std::move(columns[i]);
+        if (i < n - 1)
+            query += ", ";
+        else
             query += " from ";
-            break;
-        }
-        query += ", ";
     }
     query += std::move(table);
-    int status;
-    auto _callback = Sqlite_wrapper::callback;
-    if ((status = sqlite3_exec(db, query.c_str(), _callback, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
-        throw Sqlite3Exception(*name, query, sqlite3Errmsg);
+    _readExec(query);
 }
 
-void Sqlite_wrapper::_selectFromWhere(const std::vector<std::string> &columns, const std::string table, const std::string &where)
+void Sqlite_wrapper::_selectFromOrderBy(const std::vector<std::string> &columns, const std::string table, const std::vector<std::string> &orderByColumn, const std::string &order)
 {
     qResult->clear();
     firstQuery = true;
     std::string query = "select ";
-    auto start = columns.begin();
-    auto end = --columns.end();
-    while (true)
+    for (unsigned int i = 0, n = columns.size(); i < n; i++)
     {
-        query += std::move(*start);
-        if (start == end)
-        {
+        query += std::move(columns[i]);
+        if (i < n - 1)
+            query += ", ";
+        else
             query += " from ";
-            break;
-        }
-        query += ", ";
+    }
+    query += std::move(table);
+    query += " order by ";
+    for (unsigned int i = 0, n = orderByColumn.size(); i < n; i++)
+    {
+        query += std::move(orderByColumn[i]);
+        if (i < n - 1)
+            query += ", ";
+        else
+            query += ' ';
+    }
+    query += std::move(order);
+    _readExec(query);
+}
+
+void Sqlite_wrapper::_selectFromWhere(const std::vector<std::string> &columns, const std::string table,
+                                      const std::vector<std::string> &where, const std::string &operand)
+{
+    qResult->clear();
+    firstQuery = true;
+    std::string query = "select ";
+    for (unsigned int i = 0, n = columns.size(); i < n; i++)
+    {
+        query += std::move(columns[i]);
+        if (i < n - 1)
+            query += ", ";
+        else
+            query += " from ";
     }
     query += std::move(table);
     query += " where ";
-    query += std::move(where);
-    int status;
-    auto _callback = Sqlite_wrapper::callback;
-    if ((status = sqlite3_exec(db, query.c_str(), _callback, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
-        throw Sqlite3Exception(*name, query, sqlite3Errmsg);
+    for (unsigned int i = 0, n = where.size(); i < n; i++)
+    {
+        query += std::move(where[i]);
+        if (i < n - 1)
+            query += ' ' + operand + ' ';
+    }
+    _readExec(query);
+}
+
+void Sqlite_wrapper::_getID(const std::string &IDName, const std::string &table, const std::string &columnName, const std::string &value)
+{
+    std::string query = "select ";
+    query += std::move(IDName);
+    query += " from ";
+    query += std::move(table);
+    query += " where ";
+    query += std::move(columnName);
+    query += " = ";
+    query += '\'' + std::move(value) + '\'';
+
+    _readExec(query);
 }
 
 void Sqlite_wrapper::_selectFromLike(const std::vector<std::string> &columns, const std::string &table,
@@ -255,19 +306,46 @@ void Sqlite_wrapper::_selectFromLike(const std::vector<std::string> &columns, co
         else
             query += '\'';
     }
-    int status;
-    auto _callback = Sqlite_wrapper::callback;
-    if ((status = sqlite3_exec(db, query.c_str(), _callback, nullptr, &sqlite3Errmsg)) != SQLITE_OK)
-        throw Sqlite3Exception(*name, query, sqlite3Errmsg);
+    _readExec(query);
 }
 
-void Sqlite_wrapper::_updateTable(const std::string &tableName, const std::vector<std::string> &columns,
+void Sqlite_wrapper::_selectFromGlob(const std::vector<std::string> &columns, const std::string &table, const std::vector<std::string> &columnToCheck, const std::vector<std::string> &glob, const std::string &operand)
+{
+    if (columnToCheck.size() != glob.size())
+        throw SelectException(*name, table, "ColumnToCheck and Glob statements not correspond");
+    qResult->clear();
+    firstQuery = true;
+    std::string query = "select ";
+    for (unsigned int i = 0, n = columns.size(); i < n; i++)
+    {
+        query += std::move(columns[i]);
+        if (i < n - 1)
+            query += ", ";
+        else
+            query += " from ";
+    }
+    query += std::move(table);
+    query += " where ";
+    for (unsigned int i = 0, n = columnToCheck.size(); i < n; i++)
+    {
+        query += std::move(columnToCheck[i]);
+        query += " glob '";
+        query += std::move(glob[i]);
+        if (n > 1 && i < n - 1)
+            query += "' " + operand + ' ';
+        else
+            query += '\'';
+    }
+    _readExec(query);
+}
+
+void Sqlite_wrapper::_updateTable(const std::string &table, const std::vector<std::string> &columns,
                                   const std::vector<std::string> &values, const std::string &where)
 {
     if (columns.size() != values.size())
-        throw InsertException(*name, tableName, "Columns and Values not correspond");
+        throw InsertException(*name, table, "Columns and Values not correspond");
     std::string query = "update ";
-    query += std::move(tableName);
+    query += std::move(table);
     query += " set ";
     for (unsigned int i = 0, n = columns.size(); i < n; i++)
     {
@@ -280,7 +358,27 @@ void Sqlite_wrapper::_updateTable(const std::string &tableName, const std::vecto
     }
     query += " where ";
     query += std::move(where);
-    _noResultExec(query);
+    _modifyingExec(query);
+}
+
+void Sqlite_wrapper::_deleteRowFromTable(const std::string &table, const std::string &ID, const std::string &value)
+{
+    std::string query = "delete from ";
+    query += std::move(table);
+    query += " where ";
+    query += std::move(ID);
+    query += " = ";
+    query += std::move(value);
+
+    _modifyingExec(query);
+}
+
+void Sqlite_wrapper::_clearTable(const std::string &table)
+{
+    std::string query = "delete from ";
+    query += std::move(table) + ';';
+
+    _modifyingExec(query);
 }
 
 void Sqlite_wrapper::_disconnectFromDatabase()
@@ -298,7 +396,7 @@ void Sqlite_wrapper::sqlite3ExceptionHandler(std::exception &e)
 
 void Sqlite_wrapper::sqlite3BusyExceptionHandler(std::exception &e)
 {
-    static int count = 1;
+    int count = 1;
     std::cerr << e.what() << std::endl;
     std::this_thread::sleep_for(std::chrono::seconds(5));
     try {
@@ -385,10 +483,10 @@ Sqlite_wrapper *Sqlite_wrapper::connectToDatabase(const std::string &fileName)
     return temp;
 }
 
-void Sqlite_wrapper::createTable(const std::string &tableName)
+void Sqlite_wrapper::createTable(const std::string &table)
 {
     try {
-        _createTable(tableName);
+        _createTable(table);
     } catch (TableException &e) {
         createTableExceptionHandler(e);
     } catch (Sqlite3Exception &e) {
@@ -396,10 +494,10 @@ void Sqlite_wrapper::createTable(const std::string &tableName)
     }
 }
 
-void Sqlite_wrapper::createColumn(const std::string &columnName, const std::string &type)
+void Sqlite_wrapper::createColumn(const std::string &column, const std::string &type)
 {
     try {
-        _createColumn(columnName, type);
+        _createColumn(column, type);
     } catch (ColumnException &e) {
         createColumnExceptionHandler(e);
     }
@@ -521,10 +619,22 @@ std::shared_ptr<Query> Sqlite_wrapper::selectFrom(const std::vector<std::string>
     return qResult;
 }
 
-std::shared_ptr<Query> Sqlite_wrapper::selectFromWhere(const std::vector<std::string> &columns, const std::string table, const std::string &where)
+std::shared_ptr<Query> Sqlite_wrapper::selectFromOrderBy(const std::vector<std::string> &columns, const std::string table,
+                                                         const std::vector<std::string> &orderByColumn, const std::string &order)
 {
     try {
-        _selectFromWhere(columns, table, where);
+        _selectFromOrderBy(columns, table, orderByColumn, order);
+    } catch (std::exception &e) {
+        sqlite3ExceptionHandler(e);
+    }
+    return qResult;
+}
+
+std::shared_ptr<Query> Sqlite_wrapper::selectFromWhere(const std::vector<std::string> &columns, const std::string table,
+                                                       const std::vector<std::string> &where, const std::string &operand)
+{
+    try {
+        _selectFromWhere(columns, table, where, operand);
     } catch (Sqlite3Exception &e) {
         selectFromExceptionHandler(e);
     }
@@ -543,12 +653,58 @@ std::shared_ptr<Query> Sqlite_wrapper::selectFromLike(const std::vector<std::str
     return qResult;
 }
 
-void Sqlite_wrapper::updateTable(const std::string &tableName, const std::vector<std::string> &columns, const std::vector<std::string> &values, const std::string &where)
+std::shared_ptr<Query> Sqlite_wrapper::selectFromGlob(const std::vector<std::string> &columns, const std::string &table, const std::vector<std::string> &columnToCheck, const std::vector<std::string> &glob, const std::string &operand)
 {
     try {
-        _updateTable(tableName, columns, values, where);
+        _selectFromGlob(columns, table, columnToCheck, glob, operand);
+    } catch (Sqlite3Exception &e) {
+        selectFromExceptionHandler(e);
+    }
+    return qResult;
+}
+
+std::string Sqlite_wrapper::getID(const std::string &table, const std::string &columnName, const std::string &value, const std::string &IDName)
+{
+    std::string _IDName;
+    if (IDName == "")
+        _IDName = std::move(table) + "ID";
+    else
+        _IDName = std::move(IDName);
+    try {
+        _getID(_IDName, table, columnName, value);
+    } catch (std::exception &e) {
+        sqlite3ExceptionHandler(e);
+    }
+    if (qResult->size() == 0)
+        return "0";
+
+    return qResult->begin()->second[0];
+}
+
+void Sqlite_wrapper::updateTable(const std::string &table, const std::vector<std::string> &columns, const std::vector<std::string> &values, const std::string &where)
+{
+    try {
+        _updateTable(table, columns, values, where);
     } catch (std::exception &e) {
         updateExceptionHandler(e);
+    }
+}
+
+void Sqlite_wrapper::deleteRowFromTable(const std::string &table, const std::string &ID, const std::string &value)
+{
+    try {
+        _deleteRowFromTable(table, ID, value);
+    } catch (std::exception &e) {
+        sqlite3ExceptionHandler(e);
+    }
+}
+
+void Sqlite_wrapper::clearTable(const std::string &table)
+{
+    try {
+        _clearTable(table);
+    } catch (std::exception &e) {
+        sqlite3ExceptionHandler(e);
     }
 }
 
@@ -631,12 +787,13 @@ std::string Sqlite_wrapper::Table::getQuery()
 
     query += name;
     query += " (";
+    if (!pKisSet && noRowID)
+        query += name + "ID integer not null unique, ";
     while (columns.size() > 1)
     {
         query += columns.front().getQuery();
         query += ", ";
         columns.pop();
-
     }
     query += columns.front().getQuery();
     columns.pop();
@@ -652,7 +809,10 @@ std::string Sqlite_wrapper::Table::getQuery()
         query += foreignKeys.front().getQuery();
         foreignKeys.pop();
     }
-    query += ");";
+    if (noRowID)
+        query += ") without rowid;";
+    else
+        query += ");";
 
     return query;
 }
@@ -665,4 +825,6 @@ void Sqlite_wrapper::Table::clear()
     isForeignKey = false;
     while (foreignKeys.size() > 0)
         foreignKeys.pop();
+    noRowID = false;
+    pKisSet = false;
 }
