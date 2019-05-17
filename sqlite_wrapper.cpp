@@ -2,28 +2,25 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
-#include <filesystem>
+#include <mutex>
 
 Query Sqlite_wrapper::_result;
 bool Sqlite_wrapper::firstQuery = true;
 int Sqlite_wrapper::callback(void *, int argc, char **argv, char **azColName)
 {
     _result.resize(argc);
-    if (firstQuery)
+
+    for (int i = 0; i < argc; i++)
     {
-        for (int i = 0; i < argc; i++)
+        if (firstQuery)
         {
             _result[i].name = azColName[i];
             _result[i].values.reserve(100);
-            _result[i].values.push_back(std::string(argv[i] ? argv[i] : ""));
         }
-        firstQuery = false;
+        _result[i].values.push_back(std::string(argv[i] ? argv[i] : ""));
     }
-    else
-        for (int i = 0; i < argc; i++)
-        {
-            _result[i].values.push_back(std::string(argv[i] ? argv[i] : ""));
-        }
+    if (firstQuery)
+        firstQuery = false;
     return 0;
 }
 
@@ -717,12 +714,17 @@ void Sqlite_wrapper::modifyingExec(ParamString &query)
 
 Sqlite_wrapper::Query &Sqlite_wrapper::readExec(ParamString &query)
 {
+    std::mutex lock;
     try {
+        lock.lock();
         curTable.name.clear();
         _readExec(query);
+        firstQuery = true;
         if (_result.size() != 0)
             result = std::move(_result);
+        lock.unlock();
     } catch (std::exception &e) {
+        lock.unlock();
         sqlite3ExceptionHandler(e);
     }
     return result;
@@ -730,12 +732,17 @@ Sqlite_wrapper::Query &Sqlite_wrapper::readExec(ParamString &query)
 
 Query &Sqlite_wrapper::execSelect()
 {
+    std::mutex lock;
     try {
+        lock.lock();
         curTable.name.clear();
         _readExec(_query);
+        firstQuery = true;
         if (_result.size() != 0)
             result = std::move(_result);
+        lock.unlock();
     } catch (std::exception &e) {
+        lock.unlock();
         sqlite3ExceptionHandler(e);
     }
     return result;
