@@ -8,8 +8,16 @@
 #include <memory>
 
 #include "exceptions.h"
-//TODO Implement that ID name automaticaly shoud be set to Table Name + ID if no primary key provided.
-using Query = std::map<std::string, std::vector<std::string>>;
+
+struct resultColumn
+{
+    std::string name;
+    std::vector<std::string> values;
+};
+using Query = std::vector<resultColumn>;
+using ParamVector = const std::vector<std::string>;
+using ParamString = const std::string;
+
 
 class Sqlite_wrapper
 {
@@ -46,8 +54,12 @@ class Sqlite_wrapper
         std::string getQuery();
         void clear();
     };
+
+    using Query = std::vector<resultColumn>;
     std::shared_ptr<std::string> name;
-    static std::shared_ptr<Query> qResult;
+    static Query _result;
+    Query result;
+    std::string _query;
     static bool firstQuery;
     static int callback(void*, int argc, char **argv, char **azColName);
     char *sqlite3Errmsg;
@@ -61,37 +73,30 @@ class Sqlite_wrapper
     bool currentColumn;
     Table curTable;
     bool currentTable;
-    void _modifyingExec(const std::string &query);
-    void _readExec(const std::string &query);
-    void _createDatabase(const std::string &fileName);
-    void _createTable(const std::string &table);
-    void _createColumn(const std::string &column, const std::string &type);
+    void _modifyingExec(ParamString &query);
+    void _readExec(ParamString &query);
+    void _createDatabase(ParamString &fileName);
+    void _createTable(ParamString &table);
+    void _createColumn(ParamString &column, ParamString &type);
     void _setAsPK();
     void _setAsUnique();
     void _setAsNotNullable();
-    void _setDefaultValue(const std::string &value);
-    void _setNoRowID();//If Primary Key is not set the [Table name]ID column will be created with INTEGER type. Autoincrement willnot work
+    void _setDefaultValue(ParamString &value);
+    void _setNoRowID();//If Primary Key is not set the [Table name]ID column will be created with INTEGER type. Autoincrement will not work
     void _addColumn();
-    void _setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn);
+    void _setForeinKey(ParamString &column, ParamString &refTable, ParamString &refColumn);
     void _addTable();
-    void _dropTable(const std::string &table);//TODO
-    void _insertInto(const std::string &table, const std::vector<std::string> &columns, const std::vector<std::string> &values);
-    void _selectFrom(const std::vector<std::string> &columns, const std::string table);
-    void _selectFromOrderBy(const std::vector<std::string> &columns, const std::string table,
-                            const std::vector<std::string> &orderByColumn, const std::string &order);
-    void _selectFromWhere(const std::vector<std::string> &columns, const std::string table,
-                          const std::vector<std::string> &where, const std::string &operand);
-    void _getID(const std::string &IDName, const std::string &table, const std::string &columnName, const std::string &value);
-    void _selectFromLike(const std::vector<std::string> &columns, const std::string &table,
-                         const std::vector<std::string> &columnToCheck, const std::vector<std::string> &like,
-                         const std::string & operand);
-    void _selectFromGlob(const std::vector<std::string> &columns, const std::string &table,
-                         const std::vector<std::string> &columnToCheck, const std::vector<std::string> &glob,
-                         const std::string & operand);
-    void _updateTable(const std::string &table, const std::vector<std::string> &columns,
-                      const std::vector<std::string> &values, const std::string &where);
-    void _deleteRowFromTable(const std::string &table, const std::string &ID, const std::string &value);
-    void _clearTable(const std::string &table);
+    void _dropTable(ParamString &table);//TODO
+    void _insertInto(ParamString &table, ParamVector &columns, ParamVector &value);
+    void _where(ParamVector &columnToCheck, ParamVector &compareOperator, ParamVector &value, ParamString &operand);
+    void _like(ParamVector &columnToCheck, ParamVector &like, ParamString &operand);
+    void _glob(ParamVector &columnToCheck, ParamVector &glob, ParamString &operand);
+    void _innerJoin(ParamString &table, ParamVector &columnToCheck, ParamVector &compareOperator, ParamVector &value, ParamString &operand);
+    void _outerJoin(ParamString &table, ParamVector &columnToCheck, ParamVector &compareOperator, ParamVector &value, ParamString &operand);
+    void _getID(ParamString &IDName, ParamString &table, ParamString &columnName, ParamString &value);
+    void _updateTable(ParamString &table, ParamVector &columns, ParamVector &values, ParamString &where);
+    void _deleteRowFromTable(ParamString &table, ParamString &ID, ParamString &value);
+    void _clearTable(ParamString &table);
     void _disconnectFromDatabase();
 
 protected:
@@ -110,38 +115,40 @@ protected:
     virtual void selectFromExceptionHandler(std::exception &e);
     virtual void updateExceptionHandler(std::exception &e);
 public:
-    static Sqlite_wrapper *connectToDatabase(const std::string &fileName);
+    static Sqlite_wrapper *connectToDatabase(ParamString &fileName);
 
-    void createTable(const std::string &table);
-    void createColumn(const std::string &column, const std::string &type);
+    void createTable(ParamString &table);
+    void createColumn(ParamString &column, ParamString &type);
     void setAsPK();
     void setAsUnique();
     void setAsNotNullable();
-    void setDefaultValue(const std::string &value);
+    void setDefaultValue(ParamString &value);
     void addColumn();
-    void setForeinKey(const std::string &column, const std::string &refTable, const std::string &refColumn = "");
+    void setForeinKey(ParamString &column, ParamString &refTable, ParamString &refColumn = "");
     void addTable();
-    void dropTable(const std::string &table);//TODO
-    void insertInto(const std::string &table, const std::vector<std::string> &columns, const std::vector<std::string> &values);
-    static void printToShell(std::shared_ptr<Query> result);
-    std::shared_ptr<Query> selectFrom(const std::vector<std::string> &columns, const std::string table);
-    std::shared_ptr<Query> selectFromOrderBy(const std::vector<std::string> &columns, const std::string table,
-                                             const std::vector<std::string> &orderByColumn, const std::string &order = "asc");
-    std::shared_ptr<Query> selectFromWhere(const std::vector<std::string> &columns, const std::string table,
-                                           const std::vector<std::string> &where, const std::string &operand = ""/*and/or*/);
-    std::shared_ptr<Query> selectFromLike(const std::vector<std::string> &columns, const std::string &table,
-                                          const std::vector<std::string> &columnToCheck, const std::vector<std::string> &like,
-                                          const std::string &operand = ""/*and/or*/);
-    std::shared_ptr<Query> selectFromGlob(const std::vector<std::string> &columns, const std::string &table,
-                                          const std::vector<std::string> &columnToCheck, const std::vector<std::string> &glob,
-                                          const std::string &operand = ""/*and/or*/);
-    std::string getID(const std::string &table, const std::string &columnName, const std::string &value, const std::string &IDName = "");
+    void dropTable(ParamString &table);//TODO
+    void insertInto(ParamString &table, ParamVector &columns, ParamVector &values);
+    static void printToShell(const Query &result);
+    void selectFrom(ParamString table, ParamVector &columns);
+    void where(ParamVector &columnToCheck, ParamVector &compareOperator, ParamVector &value, ParamString &operand = ""/*and/or*/);
+    void like(ParamVector &columnToCheck, ParamVector &like, ParamString &operand = ""/*and/or*/);
+    void glob(ParamVector &columnToCheck, ParamVector &glob, ParamString &operand = ""/*and/or*/);
+    void groupBy(ParamVector &columns);
+    void orderBy(ParamVector &orderByColumn, ParamString &order = "asc");
+    void limit(int limit);
+    void crossJoin(ParamString &table);
+    void innerJoin(ParamString &table, ParamVector &columnToCheck, ParamVector &compareOperator, ParamVector &value, ParamString &operand = ""/*and/or*/);
+    void outerJoin(ParamString &table, ParamVector &columnToCheck, ParamVector &compareOperator, ParamVector &value, ParamString &operand = ""/*and/or*/);
+    std::string getID(ParamString &table, ParamString &columnName, ParamString &value, ParamString &IDName = "");
+    void modifyingExec(ParamString &query);
+    Query &readExec(ParamString &query);
+    Query &execSelect();
+    Query &getLastResult();
     //If IDName is not provided the IDName will be automatically set to table name with ID ending.
     //E.g. If table name is Test then IDName will be set to TestID
-    void updateTable(const std::string &table, const std::vector<std::string> &columns,
-                     const std::vector<std::string> &values, const std::string &where);
-    void deleteRowFromTable(const std::string &table, const std::string &ID, const std::string &value);
-    void clearTable(const std::string &table);
+    void updateTable(ParamString &table, ParamVector &columns, ParamVector &values, ParamString &where);
+    void deleteRowFromTable(ParamString &table, ParamString &ID, ParamString &value);
+    void clearTable(ParamString &table);
     void disconnectFromDatabase();
 
     virtual ~Sqlite_wrapper();
