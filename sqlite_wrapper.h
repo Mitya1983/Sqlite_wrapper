@@ -7,6 +7,8 @@
 #include <vector>
 #include <memory>
 
+#include "result.h"
+
 using ParamVector = const std::vector<std::string>;
 using ParamString = const std::string;
 
@@ -44,12 +46,12 @@ public:
 //END_Exceptions
 
 
-struct resultColumn
-{
-    std::string name;
-    std::vector<std::string> values;
-};
-using Result = std::vector<resultColumn>;
+//struct resultColumn
+//{
+//    std::string name;
+//    std::vector<std::string> values;
+//};
+//using _Result = std::vector<resultColumn>;
 
 
 class Sqlite_wrapper
@@ -138,7 +140,6 @@ protected:
     virtual void updateExceptionHandler(std::exception &e);
 public:
     static Sqlite_wrapper *connectToDatabase(ParamString &fileName);
-
     void createTable(ParamString &table);
     void createColumn(ParamString &column, ParamString &type);
     void setAsPK();

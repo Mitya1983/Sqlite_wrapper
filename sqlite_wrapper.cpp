@@ -60,50 +60,18 @@ const char *ColumnException::what() const noexcept
 {
     return _msg.c_str();
 }
-
-//InsertException::InsertException(const std::string &databaseName, const std::string &tableName, const std::string &msg)
-//{
-//    _msg = "Error on table ";
-//    _msg += std::move(tableName);
-//    _msg += " of databse ";
-//    _msg += std::move(databaseName);
-//    _msg += ": ";
-//    _msg += std::move(msg);
-//}
-
-//const char *InsertException::what() const noexcept
-//{
-//    return _msg.c_str();
-//}
-
-//SelectException::SelectException(const std::string &databaseName, const std::string &tableName, const std::string &msg)
-//{
-//    _msg = "Error on table ";
-//    _msg += std::move(tableName);
-//    _msg += " of databse ";
-//    _msg += std::move(databaseName);
-//    _msg += ": ";
-//    _msg += std::move(msg);
-//}
-
-//const char *SelectException::what() const noexcept
-//{
-//    return _msg.c_str();
-//}
 Result Sqlite_wrapper::_result;
 bool Sqlite_wrapper::firstQuery = true;
 int Sqlite_wrapper::callback(void *, int argc, char **argv, char **azColName)
 {
-    _result.resize(argc);
-
     for (int i = 0; i < argc; i++)
     {
         if (firstQuery)
         {
-            _result[i].name = azColName[i];
-            _result[i].values.reserve(100);
+            _result.resize(argc);
+            _result.addColumn(azColName[i], i);
         }
-        _result[i].values.push_back(std::string(argv[i] ? argv[i] : ""));
+        _result.addValue(std::string(argv[i] ? argv[i] : ""), i);
     }
     if (firstQuery)
         firstQuery = false;
@@ -454,24 +422,9 @@ void Sqlite_wrapper::addTable()
 void Sqlite_wrapper::printToShell(const Result &result)
 {
     if (result.size() == 0)
-    {
         std::cout << "No rows were selected" << std::endl;
-        return;
-    }
-    for (unsigned int i = 0, n = result.size(); i < n; i++)
-    {
-        std::cout << result[i].name << "\t|\t";
-    }
-    std::cout << '\n';
-    for (unsigned int i = 0, n = result[0].values.size(); i < n ; i++)
-    {
-        for (unsigned int j = 0, k = result.size(); j < k; j++)
-        {
-            std::cout << result[j].values[i] << "\t|\t";
-        }
-        std::cout << '\n';
-    }
-    std::cout << std::endl;
+    else
+        std::cout << result.resultToString() << std::endl;
 }
 
 std::string Sqlite_wrapper::getID(ParamString &table, ParamString &columnName, ParamString &value, ParamString &IDName)
@@ -486,7 +439,7 @@ std::string Sqlite_wrapper::getID(ParamString &table, ParamString &columnName, P
         if (_result.size() == 0)
             ID = "";
         else
-            ID = _result[0].name;
+            ID = _result.valueAt(0, 0);
     } catch (std::exception &e) {
         sqlite3ExceptionHandler(e);
     }

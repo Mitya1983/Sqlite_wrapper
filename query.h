@@ -54,7 +54,7 @@ public:
     void updateTable(ParamString &table, ParamVector &columns, ParamVector &values, ParamString &where);
     void deleteRowFromTable(ParamString &table, ParamString &ID, ParamString &value);
     void clearTable(ParamString &table);
-    std::string &query();
+    std::string &toString();
     virtual ~Query() = default;
 };
 

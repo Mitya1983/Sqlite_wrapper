@@ -353,7 +353,7 @@ void Query::clearTable(ParamString &table)
     _query += std::move(table) + ';';
 }
 
-std::string &Query::query()
+std::string &Query::toString()
 {
     select = false;
     return _query;
