@@ -424,7 +424,7 @@ void Sqlite_wrapper::printToShell(const Result &result)
     if (result.size() == 0)
         std::cout << "No rows were selected" << std::endl;
     else
-        std::cout << result.resultToString() << std::endl;
+        std::cout << result.ToString() << std::endl;
 }
 
 std::string Sqlite_wrapper::getID(ParamString &table, ParamString &columnName, ParamString &value, ParamString &IDName)

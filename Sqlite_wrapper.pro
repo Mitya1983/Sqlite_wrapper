@@ -9,10 +9,12 @@ LIBS += \
     -lpthread
 
 SOURCES += \
-        exceptions.cpp \
         main.cpp \
+        query.cpp \
+        result.cpp \
         sqlite_wrapper.cpp
 
 HEADERS += \
-    exceptions.h \
+    query.h \
+    result.h \
     sqlite_wrapper.h
