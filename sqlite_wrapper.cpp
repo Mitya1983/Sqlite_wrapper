@@ -427,6 +427,11 @@ void Sqlite_wrapper::printToShell(const Result &result)
         std::cout << result.ToString() << std::endl;
 }
 
+Result &Sqlite_wrapper::getTables()
+{
+    return readExec("SELECT name FROM sqlite_master WHERE type='table'");
+}
+
 std::string Sqlite_wrapper::getID(ParamString &table, ParamString &columnName, ParamString &value, ParamString &IDName)
 {
     std::string _IDName, ID;

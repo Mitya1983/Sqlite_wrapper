@@ -45,15 +45,6 @@ public:
 };
 //END_Exceptions
 
-
-//struct resultColumn
-//{
-//    std::string name;
-//    std::vector<std::string> values;
-//};
-//using _Result = std::vector<resultColumn>;
-
-
 class Sqlite_wrapper
 {
     Sqlite_wrapper();
@@ -151,7 +142,7 @@ public:
     void addTable();
     void dropTable(ParamString &table);//TODO
     static void printToShell(const Result &result);
-
+    Result &getTables();
     std::string getID(ParamString &table, ParamString &columnName, ParamString &value, ParamString &IDName = "");
     void modifyingExec(ParamString &query);
     Result &readExec(ParamString &query);
