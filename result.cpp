@@ -69,6 +69,15 @@ unsigned int Result::size() const
     return _result.size();
 }
 
+unsigned int Result::rowCount() const
+{
+    int _size = 0;
+    if (_result.size() != 0)
+        _size = _result[0].values.size();
+    return _size;
+
+}
+
 const std::vector<Result::Column> &Result::result() const
 {
     return _result;

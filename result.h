@@ -32,6 +32,7 @@ public:
     std::string valueAt(int column, int row) const;
     void clear();
     unsigned int size() const;
+    unsigned int rowCount() const;
     virtual std::string ToString() const;
     virtual void FromString(const std::string &result);
 
